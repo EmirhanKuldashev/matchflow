@@ -80,7 +80,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'matchflow_db',
         'USER': 'postgres',
-        'PASSWORD': 'Chubaka2006',
+        'PASSWORD': 'postgres',
         'HOST': 'localhost',
         'PORT': '5433',
     }
@@ -122,3 +122,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Блок 1. Куда отправлять пользователя после успешного входа.
+# После входа пользователь попадает в личный кабинет.
+LOGIN_REDIRECT_URL = 'profile'
+
+# Блок 2. Куда отправлять пользователя после выхода.
+# После выхода пользователь попадает на страницу входа.
+LOGOUT_REDIRECT_URL = 'login'
+
+
+# Блок 3. Настройки для пользовательских файлов.
+# Нужны для загрузки документов организатора и документов турнира.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
