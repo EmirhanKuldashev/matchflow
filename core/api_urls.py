@@ -3,6 +3,7 @@ from django.urls import path
 from .api_views import (
     CaptainJoinRequestListAPIView,
     LoginAPIView,
+    OrganizerVerificationAPIView,
     ProfileAPIView,
     RegisterAPIView,
     TeamCreateAPIView,
@@ -64,5 +65,13 @@ urlpatterns = [
         'join-requests/<int:request_id>/reject/',
         TeamJoinRequestRejectAPIView.as_view(),
         name='api_join_request_reject'
+    ),
+
+    # API заявки на подтверждение организатора:
+    # /api/organizer/verification/
+    path(
+        'organizer/verification/',
+        OrganizerVerificationAPIView.as_view(),
+        name='api_organizer_verification'
     ),
 ]

@@ -6,9 +6,12 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import FormParser, MultiPartParser
 
-from .models import Player, Team, TeamJoinRequest
+from .models import OrganizerVerification, Player, Team, TeamJoinRequest
 from .serializers import (
+    OrganizerVerificationCreateSerializer,
+    OrganizerVerificationSerializer,
     PlayerSerializer,
     RegisterSerializer,
     TeamCreateSerializer,
@@ -370,4 +373,89 @@ class TeamJoinRequestRejectAPIView(APIView):
                 'request': TeamJoinRequestSerializer(join_request).data
             },
             status=status.HTTP_200_OK
+        )
+    
+# Блок 10. API заявки на подтверждение организатора.
+# GET — показывает текущую заявку организатора.
+# POST — создаёт новую заявку с подтверждающим документом.
+class OrganizerVerificationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    # Блок 10.1. Разрешаем загрузку файлов через форму multipart/form-data.
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        # Блок 10.2. Проверяем роль пользователя.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {'error': 'Заявка на подтверждение доступна только организатору турниров.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 10.3. Ищем последнюю заявку текущего организатора.
+        verification = OrganizerVerification.objects.filter(
+            user=request.user
+        ).order_by('-submitted_at').first()
+
+        if verification is None:
+            return Response(
+                {'message': 'Заявка на подтверждение организатора ещё не подана.'},
+                status=status.HTTP_200_OK
+            )
+
+        serializer = OrganizerVerificationSerializer(verification)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    def post(self, request):
+        # Блок 10.4. Проверяем роль пользователя.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {'error': 'Подать заявку может только пользователь с ролью организатора турниров.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 10.5. Если уже есть заявка на проверке, новую не создаём.
+        if OrganizerVerification.objects.filter(
+            user=request.user,
+            status='pending'
+        ).exists():
+            return Response(
+                {'error': 'У вас уже есть заявка на проверке.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 10.6. Если организатор уже подтверждён, новую заявку не создаём.
+        if OrganizerVerification.objects.filter(
+            user=request.user,
+            status='approved'
+        ).exists():
+            return Response(
+                {'error': 'Ваш статус организатора уже подтверждён.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 10.7. Создаём заявку через сериализатор.
+        serializer = OrganizerVerificationCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+            verification = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Заявка на подтверждение организатора отправлена администратору.',
+                    'verification': OrganizerVerificationSerializer(verification).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
         )

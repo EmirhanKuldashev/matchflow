@@ -126,7 +126,7 @@ STATIC_URL = 'static/'
 
 # Блок 1. Куда отправлять пользователя после успешного входа.
 # После входа пользователь попадает в личный кабинет.
-LOGIN_REDIRECT_URL = 'profile'
+LOGIN_REDIRECT_URL = '/api/profile/'
 
 # Блок 2. Куда отправлять пользователя после выхода.
 # После выхода пользователь попадает на страницу входа.
@@ -139,9 +139,11 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Блок 1. Настройки Django REST Framework.
-# TokenAuthentication нужен, чтобы React мог отправлять токен пользователя в API-запросах.
+# TokenAuthentication нужен для React.
+# SessionAuthentication нужен, чтобы тестировать API через браузер после входа на сайт.
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
 }

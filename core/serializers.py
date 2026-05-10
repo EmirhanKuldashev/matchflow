@@ -1,8 +1,13 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Player, Profile, Team, TeamJoinRequest
-
+from .models import (
+    OrganizerVerification,
+    Player,
+    Profile,
+    Team,
+    TeamJoinRequest,
+)
 
 # Блок 1. Сериализатор регистрации
 # Сериализатор принимает данные из API-запроса,
@@ -252,3 +257,57 @@ class PlayerSerializer(serializers.ModelSerializer):
             'status_display',
             'joined_at',
         ]
+
+# Блок 15. Сериализатор просмотра заявки организатора.
+# Нужен, чтобы вернуть пользователю данные его заявки на подтверждение.
+class OrganizerVerificationSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = OrganizerVerification
+        fields = [
+            'id',
+            'username',
+            'user_email',
+            'organization_name',
+            'city',
+            'phone',
+            'experience_description',
+            'document',
+            'comment',
+            'status',
+            'status_display',
+            'submitted_at',
+            'reviewed_at',
+        ]
+
+
+# Блок 16. Сериализатор создания заявки организатора.
+# Нужен, чтобы пользователь с ролью organizer мог отправить заявку с документом.
+class OrganizerVerificationCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrganizerVerification
+        fields = [
+            'organization_name',
+            'city',
+            'phone',
+            'experience_description',
+            'document',
+            'comment',
+        ]
+
+    # Блок 16.1. Создание заявки.
+    # Пользователь берётся автоматически из request.user.
+    # Статус сразу ставится "На проверке".
+    def create(self, validated_data):
+        request = self.context.get('request')
+
+        verification = OrganizerVerification.objects.create(
+            user=request.user,
+            status='pending',
+            **validated_data
+        )
+
+        return verification
