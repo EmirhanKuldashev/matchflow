@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+    'rest_framework.authtoken',
     'core',
 ]
 
@@ -136,3 +137,11 @@ LOGOUT_REDIRECT_URL = 'login'
 # Нужны для загрузки документов организатора и документов турнира.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Блок 1. Настройки Django REST Framework.
+# TokenAuthentication нужен, чтобы React мог отправлять токен пользователя в API-запросах.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}

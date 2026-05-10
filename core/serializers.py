@@ -89,3 +89,37 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
         return user
+    
+# Блок 8. Сериализатор профиля пользователя.
+# Нужен, чтобы API мог вернуть данные Profile текущего пользователя.
+class ProfileSerializer(serializers.ModelSerializer):
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = [
+            'role',
+            'role_display',
+            'phone',
+            'city',
+            'email_confirmed',
+            'created_at',
+        ]
+
+
+# Блок 9. Сериализатор текущего пользователя.
+# Нужен для API личного кабинета.
+# Возвращает данные User и вложенные данные Profile.
+class UserProfileSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'first_name',
+            'last_name',
+            'email',
+            'profile',
+        ]
