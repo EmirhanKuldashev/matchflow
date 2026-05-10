@@ -15,6 +15,10 @@ urlpatterns = [
     # Например, /register/
     path('', include('core.urls')),
 
+    # API-адреса backend.
+    # Например: /api/register/
+    path('api/', include('core.api_urls')),
+
     # Страница входа:
     # /login/
     # Используем готовое представление Django LoginView.
