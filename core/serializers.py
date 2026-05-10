@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Profile, Team
+from .models import Player, Profile, Team, TeamJoinRequest
 
 
 # Блок 1. Сериализатор регистрации
@@ -172,3 +172,83 @@ class TeamCreateSerializer(serializers.ModelSerializer):
         )
 
         return team
+
+# Блок 12. Сериализатор заявки игрока на вступление в команду.
+# Нужен, чтобы игрок мог отправить заявку капитану команды.
+class TeamJoinRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeamJoinRequest
+        fields = [
+            'position',
+            'age',
+            'number',
+            'comment',
+        ]
+
+    # Блок 12.1. Создание заявки.
+    # Пользователь и команда не выбираются вручную в форме:
+    # user берём из request.user, team берём из URL.
+    def create(self, validated_data):
+        request = self.context.get('request')
+        team = self.context.get('team')
+
+        join_request = TeamJoinRequest.objects.create(
+            user=request.user,
+            team=team,
+            status='pending',
+            **validated_data
+        )
+
+        return join_request
+
+
+# Блок 13. Сериализатор просмотра заявок на вступление в команду.
+# Нужен капитану, чтобы видеть, кто хочет вступить в его команду.
+class TeamJoinRequestSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    team_name = serializers.CharField(source='team.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = TeamJoinRequest
+        fields = [
+            'id',
+            'user',
+            'user_username',
+            'user_email',
+            'team',
+            'team_name',
+            'position',
+            'age',
+            'number',
+            'comment',
+            'status',
+            'status_display',
+            'created_at',
+            'reviewed_at',
+        ]
+
+
+# Блок 14. Сериализатор игрока команды.
+# Нужен, чтобы вернуть данные созданного игрока после одобрения заявки.
+class PlayerSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    team_name = serializers.CharField(source='team.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Player
+        fields = [
+            'id',
+            'user',
+            'user_username',
+            'team',
+            'team_name',
+            'position',
+            'age',
+            'number',
+            'status',
+            'status_display',
+            'joined_at',
+        ]
