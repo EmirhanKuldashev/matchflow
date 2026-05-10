@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+
+    <!-- Блок 1. Заголовок страницы в браузере -->
+    <title>Регистрация | MatchFlow</title>
+</head>
+<body>
+
+    <!-- Блок 2. Заголовок страницы -->
+    <h1>Регистрация</h1>
+
+    <!-- Блок 3. Вывод сообщений Django -->
+    <!-- Например: "Регистрация прошла успешно" -->
+    {% if messages %}
+        {% for message in messages %}
+            <p>{{ message }}</p>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Блок 4. Форма регистрации -->
+    <!-- method="post" означает, что данные формы отправляются на сервер -->
+    <form method="post">
+
+        <!-- Блок 5. Защита формы от CSRF-атак -->
+        <!-- В Django это обязательно для POST-форм -->
+        {% csrf_token %}
+
+        <!-- Блок 6. Вывод ошибок формы -->
+        <!-- Если пользователь неправильно заполнил форму, ошибки появятся здесь -->
+        {{ form.non_field_errors }}
+
+        <!-- Блок 7. Поле username -->
+        <p>
+            <label for="{{ form.username.id_for_label }}">Логин:</label><br>
+            {{ form.username }}
+            {{ form.username.errors }}
+        </p>
+
+        <!-- Блок 8. Поле first_name -->
+        <p>
+            <label for="{{ form.first_name.id_for_label }}">Имя:</label><br>
+            {{ form.first_name }}
+            {{ form.first_name.errors }}
+        </p>
+
+        <!-- Блок 9. Поле last_name -->
+        <p>
+            <label for="{{ form.last_name.id_for_label }}">Фамилия:</label><br>
+            {{ form.last_name }}
+            {{ form.last_name.errors }}
+        </p>
+
+        <!-- Блок 10. Поле email -->
+        <p>
+            <label for="{{ form.email.id_for_label }}">Email:</label><br>
+            {{ form.email }}
+            {{ form.email.errors }}
+        </p>
+
+        <!-- Блок 11. Поле phone -->
+        <p>
+            <label for="{{ form.phone.id_for_label }}">Телефон:</label><br>
+            {{ form.phone }}
+            {{ form.phone.errors }}
+        </p>
+
+        <!-- Блок 12. Поле city -->
+        <p>
+            <label for="{{ form.city.id_for_label }}">Город:</label><br>
+            {{ form.city }}
+            {{ form.city.errors }}
+        </p>
+
+        <!-- Блок 13. Поле role -->
+        <!-- Здесь пользователь выбирает роль в системе -->
+        <p>
+            <label for="{{ form.role.id_for_label }}">Роль:</label><br>
+            {{ form.role }}
+            {{ form.role.errors }}
+        </p>
+
+        <!-- Блок 14. Поле password1 -->
+        <p>
+            <label for="{{ form.password1.id_for_label }}">Пароль:</label><br>
+            {{ form.password1 }}
+            {{ form.password1.errors }}
+        </p>
+
+        <!-- Блок 15. Поле password2 -->
+        <p>
+            <label for="{{ form.password2.id_for_label }}">Повторите пароль:</label><br>
+            {{ form.password2 }}
+            {{ form.password2.errors }}
+        </p>
+
+        <!-- Блок 16. Кнопка отправки формы -->
+        <button type="submit">Зарегистрироваться</button>
+    </form>
+
+    <!-- Блок 17. Ссылка на страницу входа -->
+    <p>
+        Уже есть аккаунт?
+        <a href="{% url 'login' %}">Войти</a>
+    </p>
+
+</body>
+</html>

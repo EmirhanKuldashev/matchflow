@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+
+    <!-- Блок 1. Заголовок страницы в браузере -->
+    <title>Вход | MatchFlow</title>
+</head>
+<body>
+
+    <!-- Блок 2. Заголовок страницы -->
+    <h1>Вход в систему</h1>
+
+    <!-- Блок 3. Вывод сообщений Django -->
+    <!-- Например, сообщение после успешной регистрации -->
+    {% if messages %}
+        {% for message in messages %}
+            <p>{{ message }}</p>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Блок 4. Форма входа -->
+    <!-- Эту форму обрабатывает стандартный Django LoginView -->
+    <form method="post">
+
+        <!-- Блок 5. CSRF-защита -->
+        {% csrf_token %}
+
+        <!-- Блок 6. Общие ошибки формы -->
+        <!-- Например, если логин или пароль неверные -->
+        {{ form.non_field_errors }}
+
+        <!-- Блок 7. Поле username -->
+        <p>
+            <label for="{{ form.username.id_for_label }}">Логин:</label><br>
+            {{ form.username }}
+            {{ form.username.errors }}
+        </p>
+
+        <!-- Блок 8. Поле password -->
+        <p>
+            <label for="{{ form.password.id_for_label }}">Пароль:</label><br>
+            {{ form.password }}
+            {{ form.password.errors }}
+        </p>
+
+        <!-- Блок 9. Кнопка входа -->
+        <button type="submit">Войти</button>
+    </form>
+
+    <!-- Блок 10. Ссылка на регистрацию -->
+    <p>
+        Нет аккаунта?
+        <a href="{% url 'register' %}">Зарегистрироваться</a>
+    </p>
+
+</body>
+</html>
