@@ -1,7 +1,12 @@
 from django.urls import path
 
-from .api_views import LoginAPIView, ProfileAPIView, RegisterAPIView
-
+from .api_views import (
+    LoginAPIView,
+    ProfileAPIView,
+    RegisterAPIView,
+    TeamCreateAPIView,
+    TeamListAPIView,
+)
 
 # Блок 1. API-маршруты приложения core.
 urlpatterns = [
@@ -16,4 +21,12 @@ urlpatterns = [
     # API личного кабинета:
     # /api/profile/
     path('profile/', ProfileAPIView.as_view(), name='api_profile'),
+
+    # API списка подтверждённых команд:
+    # /api/teams/
+    path('teams/', TeamListAPIView.as_view(), name='api_teams'),
+
+    # API создания команды:
+    # /api/teams/create/
+    path('teams/create/', TeamCreateAPIView.as_view(), name='api_team_create'),
 ]

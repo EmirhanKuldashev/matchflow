@@ -6,8 +6,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import RegisterSerializer, UserProfileSerializer
-
+from .models import Team
+from .serializers import (
+    RegisterSerializer,
+    TeamCreateSerializer,
+    TeamSerializer,
+    UserProfileSerializer,
+)
 
 # Блок 1. API регистрации пользователя.
 # Этот класс обрабатывает POST-запрос на /api/register/.
@@ -111,4 +116,57 @@ class ProfileAPIView(APIView):
         return Response(
             serializer.data,
             status=status.HTTP_200_OK
+        )
+
+# Блок 4. API списка подтверждённых команд.
+# Доступен всем пользователям, включая гостей.
+class TeamListAPIView(APIView):
+    def get(self, request):
+        # Показываем только подтверждённые команды.
+        teams = Team.objects.filter(status='approved').order_by('-created_at')
+
+        serializer = TeamSerializer(teams, many=True)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 5. API создания команды капитаном.
+# Доступен только авторизованному пользователю с ролью captain.
+class TeamCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # Блок 5.1. Проверяем роль пользователя.
+        # Создать команду может только капитан команды.
+        if request.user.profile.role != 'captain':
+            return Response(
+                {'error': 'Создавать команду может только капитан команды.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 5.2. Передаём данные в сериализатор.
+        serializer = TeamCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        # Блок 5.3. Если данные корректны, создаём команду.
+        if serializer.is_valid():
+            team = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Команда создана и отправлена на проверку администратору.',
+                    'team': TeamSerializer(team).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        # Блок 5.4. Если данные некорректны, возвращаем ошибки.
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
         )

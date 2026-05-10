@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Profile
+from .models import Profile, Team
 
 
 # Блок 1. Сериализатор регистрации
@@ -123,3 +123,52 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'email',
             'profile',
         ]
+
+# Блок 10. Сериализатор списка команд.
+# Нужен, чтобы API возвращал данные подтверждённых команд.
+class TeamSerializer(serializers.ModelSerializer):
+    captain_username = serializers.CharField(source='captain.username', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    game_format_display = serializers.CharField(source='get_game_format_display', read_only=True)
+
+    class Meta:
+        model = Team
+        fields = [
+            'id',
+            'name',
+            'city',
+            'game_format',
+            'game_format_display',
+            'description',
+            'captain_username',
+            'status',
+            'status_display',
+            'created_at',
+        ]
+
+
+# Блок 11. Сериализатор создания команды.
+# Нужен, чтобы капитан мог отправить команду на проверку.
+class TeamCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = [
+            'name',
+            'city',
+            'game_format',
+            'description',
+        ]
+
+    # Блок 11.1. Создание команды.
+    # Капитан берётся автоматически из request.user во view.
+    # Статус команды сразу ставится "На проверке".
+    def create(self, validated_data):
+        request = self.context.get('request')
+
+        team = Team.objects.create(
+            captain=request.user,
+            status='pending',
+            **validated_data
+        )
+
+        return team
