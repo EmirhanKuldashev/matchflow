@@ -124,6 +124,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+
 # Блок 1. Куда отправлять пользователя после успешного входа.
 # После входа пользователь попадает в личный кабинет.
 LOGIN_REDIRECT_URL = '/api/profile/'
@@ -147,3 +148,4 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
+
