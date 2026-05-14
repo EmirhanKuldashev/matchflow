@@ -133,6 +133,45 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'profile',
         ]
 
+# Блок 9.1. Сериализатор редактирования профиля пользователя.
+# Нужен, чтобы пользователь мог изменить имя, фамилию, телефон и город.
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'first_name',
+            'last_name',
+            'phone',
+            'city',
+        ]
+
+    # Блок 9.2. Обновление данных пользователя и связанного профиля.
+    # Поля User сохраняются в User, а телефон и город — в Profile.
+    def update(self, instance, validated_data):
+        profile = instance.profile
+
+        if 'first_name' in validated_data:
+            instance.first_name = validated_data['first_name']
+
+        if 'last_name' in validated_data:
+            instance.last_name = validated_data['last_name']
+
+        if 'phone' in validated_data:
+            profile.phone = validated_data['phone']
+
+        if 'city' in validated_data:
+            profile.city = validated_data['city']
+
+        instance.save()
+        profile.save()
+
+        return instance
+
 # Блок 10. Сериализатор списка команд.
 # Нужен, чтобы API возвращал данные подтверждённых команд.
 class TeamSerializer(serializers.ModelSerializer):

@@ -38,6 +38,7 @@ from .serializers import (
     TournamentSerializer,
     TournamentSubscriptionSerializer,
     UserProfileSerializer,
+    UserProfileUpdateSerializer,
 )
 # Блок 0. Универсальная функция пагинации.
 # Нужна, чтобы не писать одинаковый код пагинации
@@ -197,6 +198,44 @@ class ProfileAPIView(APIView):
         return Response(
             serializer.data,
             status=status.HTTP_200_OK
+        )
+
+# Блок 3.3. API редактирования профиля пользователя.
+# Доступен только авторизованному пользователю.
+# Позволяет изменить first_name, last_name, phone и city.
+class ProfileUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        # Блок 3.4. Проверяем, что у пользователя есть связанный Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {'error': 'У пользователя нет профиля.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 3.5. Передаём частичные данные в сериализатор редактирования.
+        serializer = UserProfileUpdateSerializer(
+            instance=request.user,
+            data=request.data,
+            partial=True
+        )
+
+        # Блок 3.6. Если данные корректные, сохраняем и возвращаем обновлённый профиль.
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                {
+                    'message': 'Профиль успешно обновлён.',
+                    'user': UserProfileSerializer(request.user).data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
         )
 
 # Блок 4. API списка подтверждённых команд.

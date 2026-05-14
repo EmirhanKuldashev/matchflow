@@ -11,6 +11,7 @@ from .api_views import (
     OrganizerTournamentApplicationListAPIView,
     OrganizerVerificationAPIView,
     ProfileAPIView,
+    ProfileUpdateAPIView,
     RegisterAPIView,
     TeamCreateAPIView,
     TeamJoinRequestApproveAPIView,
@@ -58,6 +59,14 @@ urlpatterns = [
         'profile/',
         ProfileAPIView.as_view(),
         name='api_profile'
+    ),
+
+    # Блок 4.1. API редактирования личного кабинета:
+    # PATCH /api/profile/update/
+    path(
+        'profile/update/',
+        ProfileUpdateAPIView.as_view(),
+        name='api_profile_update'
     ),
 
     # Блок 5. API списка подтверждённых команд:
