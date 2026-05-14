@@ -147,3 +147,12 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
+
+# Блок 4. Настройки локального кэша.
+# Используется для кэширования публичных списков API в режиме разработки.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'matchflow-local-cache',
+    }
+}

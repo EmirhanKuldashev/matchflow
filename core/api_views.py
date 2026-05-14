@@ -1,5 +1,8 @@
+from urllib.parse import quote
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.utils import timezone
 from django.core.paginator import Paginator
 from rest_framework import status
@@ -40,6 +43,9 @@ from .serializers import (
     UserProfileSerializer,
     UserProfileUpdateSerializer,
 )
+
+TOURNAMENT_LIST_CACHE_TIMEOUT = 300
+
 # Блок 0. Универсальная функция пагинации.
 # Нужна, чтобы не писать одинаковый код пагинации
 # в каждом списочном API: команды, турниры, матчи.
@@ -629,8 +635,37 @@ class OrganizerVerificationAPIView(APIView):
 # page — номер страницы
 # page_size — количество записей на странице
 class TournamentListAPIView(APIView):
+    # Блок 11.1. Cookie последнего выбранного города.
+    # Нужна, чтобы фронтенд мог запомнить последний город фильтрации турниров.
+    def set_last_tournament_city_cookie(self, request, response):
+        city = request.GET.get('city')
+
+        if city:
+            response.set_cookie(
+                key='last_tournament_city',
+                value=quote(city),
+                max_age=60 * 60 * 24 * 30,
+                samesite='Lax'
+            )
+
+        return response
+
     def get(self, request):
-        # Блок 11.1. Получаем только публичные турниры.
+        # Блок 11.2. Кэширование публичного списка турниров.
+        # Нужен, чтобы повторные запросы с одинаковыми фильтрами не обращались к базе данных.
+        query_string = request.GET.urlencode()
+        cache_key = f'tournament_list:{query_string}'
+        cached_response = cache.get(cache_key)
+
+        if cached_response is not None:
+            response = Response(
+                cached_response,
+                status=status.HTTP_200_OK
+            )
+
+            return self.set_last_tournament_city_cookie(request, response)
+
+        # Блок 11.3. Получаем только публичные турниры.
         # pending и rejected не показываем обычным пользователям.
         tournaments = Tournament.objects.filter(
             status__in=[
@@ -641,7 +676,7 @@ class TournamentListAPIView(APIView):
             ]
         ).order_by('-created_at')
 
-        # Блок 11.2. Поиск по названию, описанию и правилам.
+        # Блок 11.4. Поиск по названию, описанию и правилам.
         # Пример:
         # /api/tournaments/?search=cup
         search = request.query_params.get('search')
@@ -653,7 +688,7 @@ class TournamentListAPIView(APIView):
                 models.Q(rules__icontains=search)
             )
 
-        # Блок 11.3. Фильтрация по городу.
+        # Блок 11.5. Фильтрация по городу.
         # Пример:
         # /api/tournaments/?city=Krasnoyarsk
         city = request.query_params.get('city')
@@ -663,7 +698,7 @@ class TournamentListAPIView(APIView):
                 city__icontains=city
             )
 
-        # Блок 11.4. Фильтрация по формату игры.
+        # Блок 11.6. Фильтрация по формату игры.
         # Пример:
         # /api/tournaments/?game_format=5x5
         game_format = request.query_params.get('game_format')
@@ -673,7 +708,7 @@ class TournamentListAPIView(APIView):
                 game_format=game_format
             )
 
-        # Блок 11.5. Фильтрация по статусу.
+        # Блок 11.7. Фильтрация по статусу.
         # Пример:
         # /api/tournaments/?status=registration
         status_filter = request.query_params.get('status')
@@ -683,17 +718,25 @@ class TournamentListAPIView(APIView):
                 status=status_filter
             )
 
-        # Блок 11.6. Возвращаем результат с пагинацией.
+        # Блок 11.8. Возвращаем результат с пагинацией.
         paginated_data = paginate_queryset(
             queryset=tournaments,
             request=request,
             serializer_class=TournamentSerializer
         )
 
-        return Response(
+        cache.set(
+            cache_key,
+            paginated_data,
+            TOURNAMENT_LIST_CACHE_TIMEOUT
+        )
+
+        response = Response(
             paginated_data,
             status=status.HTTP_200_OK
         )
+
+        return self.set_last_tournament_city_cookie(request, response)
 # Блок 12. API подробной информации о турнире.
 # Endpoint:
 # GET /api/tournaments/<tournament_id>/
