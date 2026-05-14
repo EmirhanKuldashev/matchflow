@@ -81,7 +81,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'matchflow_db',
         'USER': 'postgres',
-        'PASSWORD': 'postgres',
+        'PASSWORD': 'Chubaka2006',
         'HOST': 'localhost',
         'PORT': '5433',
     }
@@ -124,7 +124,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-
 # Блок 1. Куда отправлять пользователя после успешного входа.
 # После входа пользователь попадает в личный кабинет.
 LOGIN_REDIRECT_URL = '/api/profile/'
@@ -148,4 +147,3 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
-

@@ -1,15 +1,29 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.paginator import Paginator
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
+from django.db import models
 
-from .models import OrganizerVerification, Player, Team, TeamJoinRequest
+from .models import (
+    Match,
+    OrganizerVerification,
+    Player,
+    Team,
+    TeamJoinRequest,
+    Tournament,
+    TournamentApplication,
+    TournamentSubscription,
+)
 from .serializers import (
+    MatchCreateSerializer,
+    MatchResultUpdateSerializer,
+    MatchSerializer,
     OrganizerVerificationCreateSerializer,
     OrganizerVerificationSerializer,
     PlayerSerializer,
@@ -18,9 +32,69 @@ from .serializers import (
     TeamJoinRequestCreateSerializer,
     TeamJoinRequestSerializer,
     TeamSerializer,
+    TournamentApplicationCreateSerializer,
+    TournamentApplicationSerializer,
+    TournamentCreateSerializer,
+    TournamentSerializer,
+    TournamentSubscriptionSerializer,
     UserProfileSerializer,
 )
+# Блок 0. Универсальная функция пагинации.
+# Нужна, чтобы не писать одинаковый код пагинации
+# в каждом списочном API: команды, турниры, матчи.
+def paginate_queryset(queryset, request, serializer_class, default_page_size=5, max_page_size=50):
+    # Блок 0.1. Получаем номер страницы из query-параметра.
+    # Например:
+    # /api/teams/?page=2
+    try:
+        page = int(request.query_params.get('page', 1))
+    except ValueError:
+        page = 1
 
+    # Блок 0.2. Получаем размер страницы.
+    # Например:
+    # /api/teams/?page_size=10
+    try:
+        page_size = int(request.query_params.get('page_size', default_page_size))
+    except ValueError:
+        page_size = default_page_size
+
+    # Блок 0.3. Защита от некорректных значений.
+    if page < 1:
+        page = 1
+
+    if page_size < 1:
+        page_size = default_page_size
+
+    # Блок 0.4. Ограничиваем максимальный размер страницы,
+    # чтобы пользователь случайно не запросил слишком много данных.
+    if page_size > max_page_size:
+        page_size = max_page_size
+
+    # Блок 0.5. Создаём объект пагинатора.
+    paginator = Paginator(queryset, page_size)
+
+    # Блок 0.6. Получаем нужную страницу.
+    # Если пользователь запросил страницу больше последней,
+    # Django вернёт последнюю доступную страницу.
+    page_obj = paginator.get_page(page)
+
+    # Блок 0.7. Сериализуем только объекты текущей страницы.
+    serializer = serializer_class(
+        page_obj.object_list,
+        many=True
+    )
+
+    # Блок 0.8. Возвращаем единый формат ответа.
+    return {
+        'count': paginator.count,
+        'page': page_obj.number,
+        'page_size': page_size,
+        'total_pages': paginator.num_pages,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+        'results': serializer.data,
+    }
 # Блок 1. API регистрации пользователя.
 # Этот класс обрабатывает POST-запрос на /api/register/.
 class RegisterAPIView(APIView):
@@ -127,19 +201,62 @@ class ProfileAPIView(APIView):
 
 # Блок 4. API списка подтверждённых команд.
 # Доступен всем пользователям, включая гостей.
+#
+# Поддерживает:
+# search — поиск по названию и описанию
+# city — фильтр по городу
+# game_format — фильтр по формату игры
+# page — номер страницы
+# page_size — количество записей на странице
 class TeamListAPIView(APIView):
     def get(self, request):
-        # Показываем только подтверждённые команды.
-        teams = Team.objects.filter(status='approved').order_by('-created_at')
+        # Блок 4.1. Показываем только подтверждённые команды.
+        teams = Team.objects.filter(
+            status='approved'
+        ).order_by('-created_at')
 
-        serializer = TeamSerializer(teams, many=True)
+        # Блок 4.2. Поиск по названию и описанию.
+        # Пример:
+        # /api/teams/?search=barsy
+        search = request.query_params.get('search')
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
+        if search:
+            teams = teams.filter(
+                models.Q(name__icontains=search) |
+                models.Q(description__icontains=search)
+            )
+
+        # Блок 4.3. Фильтрация по городу.
+        # Пример:
+        # /api/teams/?city=Krasnoyarsk
+        city = request.query_params.get('city')
+
+        if city:
+            teams = teams.filter(
+                city__icontains=city
+            )
+
+        # Блок 4.4. Фильтрация по формату игры.
+        # Пример:
+        # /api/teams/?game_format=5x5
+        game_format = request.query_params.get('game_format')
+
+        if game_format:
+            teams = teams.filter(
+                game_format=game_format
+            )
+
+        # Блок 4.5. Возвращаем результат с пагинацией.
+        paginated_data = paginate_queryset(
+            queryset=teams,
+            request=request,
+            serializer_class=TeamSerializer
         )
 
-
+        return Response(
+            paginated_data,
+            status=status.HTTP_200_OK
+        )
 # Блок 5. API создания команды капитаном.
 # Доступен только авторизованному пользователю с ролью captain.
 class TeamCreateAPIView(APIView):
@@ -458,4 +575,809 @@ class OrganizerVerificationAPIView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
+        )
+# Блок 11. API списка турниров.
+# Endpoint:
+# GET /api/tournaments/
+#
+# Доступен всем пользователям.
+#
+# Поддерживает:
+# search — поиск по названию, описанию, правилам
+# city — фильтр по городу
+# game_format — фильтр по формату игры
+# status — фильтр по статусу
+# page — номер страницы
+# page_size — количество записей на странице
+class TournamentListAPIView(APIView):
+    def get(self, request):
+        # Блок 11.1. Получаем только публичные турниры.
+        # pending и rejected не показываем обычным пользователям.
+        tournaments = Tournament.objects.filter(
+            status__in=[
+                'approved',
+                'registration',
+                'active',
+                'finished',
+            ]
+        ).order_by('-created_at')
+
+        # Блок 11.2. Поиск по названию, описанию и правилам.
+        # Пример:
+        # /api/tournaments/?search=cup
+        search = request.query_params.get('search')
+
+        if search:
+            tournaments = tournaments.filter(
+                models.Q(name__icontains=search) |
+                models.Q(description__icontains=search) |
+                models.Q(rules__icontains=search)
+            )
+
+        # Блок 11.3. Фильтрация по городу.
+        # Пример:
+        # /api/tournaments/?city=Krasnoyarsk
+        city = request.query_params.get('city')
+
+        if city:
+            tournaments = tournaments.filter(
+                city__icontains=city
+            )
+
+        # Блок 11.4. Фильтрация по формату игры.
+        # Пример:
+        # /api/tournaments/?game_format=5x5
+        game_format = request.query_params.get('game_format')
+
+        if game_format:
+            tournaments = tournaments.filter(
+                game_format=game_format
+            )
+
+        # Блок 11.5. Фильтрация по статусу.
+        # Пример:
+        # /api/tournaments/?status=registration
+        status_filter = request.query_params.get('status')
+
+        if status_filter:
+            tournaments = tournaments.filter(
+                status=status_filter
+            )
+
+        # Блок 11.6. Возвращаем результат с пагинацией.
+        paginated_data = paginate_queryset(
+            queryset=tournaments,
+            request=request,
+            serializer_class=TournamentSerializer
+        )
+
+        return Response(
+            paginated_data,
+            status=status.HTTP_200_OK
+        )
+# Блок 12. API подробной информации о турнире.
+# Endpoint:
+# GET /api/tournaments/<tournament_id>/
+#
+# Нужен для страницы одного турнира.
+class TournamentDetailAPIView(APIView):
+    def get(self, request, tournament_id):
+        # Блок 12.1. Ищем турнир по id.
+        # Но отдаём только публичные турниры.
+        try:
+            tournament = Tournament.objects.get(
+                id=tournament_id,
+                status__in=[
+                    'approved',
+                    'registration',
+                    'active',
+                    'finished',
+                ]
+            )
+        except Tournament.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Турнир не найден или ещё не подтверждён администратором.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 12.2. Преобразуем турнир в JSON.
+        serializer = TournamentSerializer(tournament)
+
+        # Блок 12.3. Возвращаем данные турнира.
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 13. API создания турнира.
+# Endpoint:
+# POST /api/tournaments/create/
+#
+# Доступен только пользователю с ролью organizer,
+# причём организатор должен быть подтверждён администратором.
+class TournamentCreateAPIView(APIView):
+    # Блок 13.1. Создавать турнир может только авторизованный пользователь.
+    permission_classes = [IsAuthenticated]
+
+    # Блок 13.2. Разрешаем отправку файлов.
+    # Это нужно, потому что при создании турнира
+    # организатор прикрепляет подтверждающий документ.
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        # Блок 13.3. Проверяем, что у пользователя есть Profile.
+        # Суперпользователь, созданный через createsuperuser,
+        # может не иметь Profile, поэтому защищаемся от ошибки.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля. Создайте пользователя через регистрацию.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 13.4. Проверяем роль пользователя.
+        # Турниры может создавать только организатор.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Создавать турниры может только организатор турниров.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 13.5. Проверяем подтверждение организатора.
+        # Просто роль organizer недостаточна.
+        # Нужно, чтобы администратор подтвердил OrganizerVerification.
+        is_verified_organizer = OrganizerVerification.objects.filter(
+            user=request.user,
+            status='approved'
+        ).exists()
+
+        if not is_verified_organizer:
+            return Response(
+                {
+                    'error': 'Создавать турниры можно только после подтверждения статуса организатора администратором.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 13.6. Передаём данные в сериализатор создания турнира.
+        serializer = TournamentCreateSerializer(
+            data=request.data,
+            context={
+                'request': request
+            }
+        )
+
+        # Блок 13.7. Если данные корректные, создаём турнир.
+        if serializer.is_valid():
+            tournament = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Турнир создан и отправлен на проверку администратору.',
+                    'tournament': TournamentSerializer(tournament).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        # Блок 13.8. Если данные некорректные, возвращаем ошибки.
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+# Блок 14. API подачи заявки команды на турнир.
+# Endpoint:
+# POST /api/tournaments/<tournament_id>/apply/
+#
+# Этот endpoint использует капитан команды.
+# Капитан выбирает свою подтверждённую команду
+# и подаёт её на участие в турнире.
+class TournamentApplicationCreateAPIView(APIView):
+    # Блок 14.1. Подать заявку может только авторизованный пользователь.
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, tournament_id):
+        # Блок 14.2. Проверяем, что у пользователя есть Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля. Создайте пользователя через регистрацию.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 14.3. Проверяем роль.
+        # Подать команду на турнир может только капитан.
+        if request.user.profile.role != 'captain':
+            return Response(
+                {
+                    'error': 'Подать заявку на турнир может только капитан команды.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 14.4. Ищем турнир.
+        try:
+            tournament = Tournament.objects.get(id=tournament_id)
+        except Tournament.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Турнир не найден.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 14.5. Передаём данные в сериализатор.
+        serializer = TournamentApplicationCreateSerializer(
+            data=request.data,
+            context={
+                'request': request,
+                'tournament': tournament,
+            }
+        )
+
+        # Блок 14.6. Если данные корректные — создаём заявку.
+        if serializer.is_valid():
+            application = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Заявка команды на участие в турнире отправлена организатору.',
+                    'application': TournamentApplicationSerializer(application).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        # Блок 14.7. Если данные некорректные — возвращаем ошибки.
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# Блок 15. API списка заявок на турниры организатора.
+# Endpoint:
+# GET /api/organizer/tournament-applications/
+#
+# Организатор видит заявки только на свои турниры.
+class OrganizerTournamentApplicationListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Блок 15.1. Проверяем Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 15.2. Проверяем роль.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Просматривать заявки может только организатор турнира.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 15.3. Получаем заявки только на турниры текущего организатора.
+        applications = TournamentApplication.objects.filter(
+            tournament__organizer=request.user
+        ).order_by('-created_at')
+
+        # Блок 15.4. Фильтр по статусу.
+        # Пример:
+        # /api/organizer/tournament-applications/?status=pending
+        status_filter = request.query_params.get('status')
+
+        if status_filter:
+            applications = applications.filter(status=status_filter)
+
+        # Блок 15.5. Фильтр по турниру.
+        # Пример:
+        # /api/organizer/tournament-applications/?tournament=1
+        tournament_id = request.query_params.get('tournament')
+
+        if tournament_id:
+            applications = applications.filter(tournament_id=tournament_id)
+
+        # Блок 15.6. Превращаем заявки в JSON.
+        serializer = TournamentApplicationSerializer(
+            applications,
+            many=True
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 16. API одобрения заявки команды на турнир.
+# Endpoint:
+# POST /api/tournament-applications/<application_id>/approve/
+#
+# Доступен только организатору турнира.
+class TournamentApplicationApproveAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, application_id):
+        # Блок 16.1. Проверяем Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 16.2. Проверяем роль организатора.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Одобрять заявки может только организатор турнира.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 16.3. Ищем заявку только среди турниров текущего организатора.
+        try:
+            application = TournamentApplication.objects.get(
+                id=application_id,
+                tournament__organizer=request.user
+            )
+        except TournamentApplication.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Заявка не найдена.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 16.4. Проверяем, что заявка ещё не была рассмотрена.
+        if application.status != 'pending':
+            return Response(
+                {
+                    'error': 'Эта заявка уже была рассмотрена.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 16.5. Одобряем заявку.
+        application.status = 'approved'
+        application.reviewed_at = timezone.now()
+        application.save()
+
+        return Response(
+            {
+                'message': 'Заявка команды на турнир одобрена.',
+                'application': TournamentApplicationSerializer(application).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 17. API отклонения заявки команды на турнир.
+# Endpoint:
+# POST /api/tournament-applications/<application_id>/reject/
+#
+# Доступен только организатору турнира.
+class TournamentApplicationRejectAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, application_id):
+        # Блок 17.1. Проверяем Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 17.2. Проверяем роль организатора.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Отклонять заявки может только организатор турнира.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 17.3. Ищем заявку только среди турниров текущего организатора.
+        try:
+            application = TournamentApplication.objects.get(
+                id=application_id,
+                tournament__organizer=request.user
+            )
+        except TournamentApplication.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Заявка не найдена.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 17.4. Проверяем, что заявка ещё pending.
+        if application.status != 'pending':
+            return Response(
+                {
+                    'error': 'Эта заявка уже была рассмотрена.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 17.5. Отклоняем заявку.
+        application.status = 'rejected'
+        application.reviewed_at = timezone.now()
+        application.save()
+
+        return Response(
+            {
+                'message': 'Заявка команды на турнир отклонена.',
+                'application': TournamentApplicationSerializer(application).data
+            },
+            status=status.HTTP_200_OK
+        )
+# Блок 18. API списка матчей.
+# Endpoint:
+# GET /api/matches/
+#
+# Доступен всем пользователям.
+#
+# Поддерживает:
+# search — поиск по турниру, командам и стадиону
+# tournament — фильтр по турниру
+# team — фильтр по команде
+# status — фильтр по статусу матча
+# page — номер страницы
+# page_size — количество записей на странице
+class MatchListAPIView(APIView):
+    def get(self, request):
+        # Блок 18.1. Получаем все матчи.
+        matches = Match.objects.all().order_by('match_date')
+
+        # Блок 18.2. Поиск по названию турнира, команд и стадиона.
+        # Пример:
+        # /api/matches/?search=barsy
+        search = request.query_params.get('search')
+
+        if search:
+            matches = matches.filter(
+                models.Q(tournament__name__icontains=search) |
+                models.Q(team1__name__icontains=search) |
+                models.Q(team2__name__icontains=search) |
+                models.Q(stadium__name__icontains=search)
+            )
+
+        # Блок 18.3. Фильтр по турниру.
+        # Пример:
+        # /api/matches/?tournament=1
+        tournament_id = request.query_params.get('tournament')
+
+        if tournament_id:
+            matches = matches.filter(
+                tournament_id=tournament_id
+            )
+
+        # Блок 18.4. Фильтр по статусу.
+        # Пример:
+        # /api/matches/?status=scheduled
+        status_filter = request.query_params.get('status')
+
+        if status_filter:
+            matches = matches.filter(
+                status=status_filter
+            )
+
+        # Блок 18.5. Фильтр по команде.
+        # Покажет матчи, где команда является team1 или team2.
+        # Пример:
+        # /api/matches/?team=1
+        team_id = request.query_params.get('team')
+
+        if team_id:
+            matches = matches.filter(
+                models.Q(team1_id=team_id) |
+                models.Q(team2_id=team_id)
+            )
+
+        # Блок 18.6. Возвращаем результат с пагинацией.
+        paginated_data = paginate_queryset(
+            queryset=matches,
+            request=request,
+            serializer_class=MatchSerializer
+        )
+
+        return Response(
+            paginated_data,
+            status=status.HTTP_200_OK
+        )
+# Блок 19. API подробной информации о матче.
+# Endpoint:
+# GET /api/matches/<match_id>/
+class MatchDetailAPIView(APIView):
+    def get(self, request, match_id):
+        # Блок 19.1. Ищем матч.
+        try:
+            match = Match.objects.get(id=match_id)
+        except Match.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Матч не найден.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 19.2. Превращаем матч в JSON.
+        serializer = MatchSerializer(match)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 20. API создания матча.
+# Endpoint:
+# POST /api/matches/create/
+#
+# Матч создаёт организатор турнира.
+class MatchCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # Блок 20.1. Проверяем Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 20.2. Проверяем роль.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Создавать матчи может только организатор турнира.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 20.3. Передаём данные в сериализатор.
+        serializer = MatchCreateSerializer(
+            data=request.data,
+            context={
+                'request': request
+            }
+        )
+
+        # Блок 20.4. Если данные корректны — создаём матч.
+        if serializer.is_valid():
+            match = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Матч успешно создан.',
+                    'match': MatchSerializer(match).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        # Блок 20.5. Если данные некорректны — возвращаем ошибки.
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# Блок 21. API внесения результата матча.
+# Endpoint:
+# PATCH /api/matches/<match_id>/result/
+#
+# Результат может внести только организатор турнира.
+class MatchResultUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, match_id):
+        # Блок 21.1. Проверяем Profile.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 21.2. Проверяем роль.
+        if request.user.profile.role != 'organizer':
+            return Response(
+                {
+                    'error': 'Вносить результат может только организатор турнира.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 21.3. Ищем матч только среди турниров текущего организатора.
+        try:
+            match = Match.objects.get(
+                id=match_id,
+                tournament__organizer=request.user
+            )
+        except Match.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Матч не найден.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 21.4. Проверяем, что матч ещё не сыгран.
+        if match.status == 'played':
+            return Response(
+                {
+                    'error': 'Результат этого матча уже внесён.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 21.5. Передаём данные результата в сериализатор.
+        serializer = MatchResultUpdateSerializer(
+            match,
+            data=request.data,
+            partial=True
+        )
+
+        # Блок 21.6. Если данные корректны — сохраняем результат.
+        if serializer.is_valid():
+            match = serializer.save()
+
+            return Response(
+                {
+                    'message': 'Результат матча успешно сохранён.',
+                    'match': MatchSerializer(match).data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+# Блок 22. API подписки пользователя на турнир.
+# Endpoint:
+# POST /api/tournaments/<tournament_id>/subscribe/
+#
+# Этот endpoint нужен обычному пользователю, игроку, капитану или организатору,
+# чтобы добавить турнир в список "Мои турниры".
+class TournamentSubscribeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, tournament_id):
+        # Блок 22.1. Проверяем, что у пользователя есть профиль.
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {
+                    'error': 'У пользователя нет профиля. Создайте пользователя через регистрацию.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Блок 22.2. Ищем публичный турнир.
+        # Нельзя подписываться на турнир, который ещё на проверке или отклонён.
+        try:
+            tournament = Tournament.objects.get(
+                id=tournament_id,
+                status__in=[
+                    'approved',
+                    'registration',
+                    'active',
+                    'finished',
+                ]
+            )
+        except Tournament.DoesNotExist:
+            return Response(
+                {
+                    'error': 'Турнир не найден или ещё не опубликован.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Блок 22.3. Создаём подписку, если её ещё нет.
+        # get_or_create защищает от повторных одинаковых подписок.
+        subscription, created = TournamentSubscription.objects.get_or_create(
+            user=request.user,
+            tournament=tournament
+        )
+
+        # Блок 22.4. Если подписка уже была, сообщаем об этом.
+        if not created:
+            return Response(
+                {
+                    'message': 'Вы уже подписаны на этот турнир.',
+                    'subscription': TournamentSubscriptionSerializer(subscription).data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        # Блок 22.5. Возвращаем созданную подписку.
+        return Response(
+            {
+                'message': 'Вы успешно подписались на турнир.',
+                'subscription': TournamentSubscriptionSerializer(subscription).data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+# Блок 23. API отписки пользователя от турнира.
+# Endpoint:
+# POST /api/tournaments/<tournament_id>/unsubscribe/
+#
+# Этот endpoint удаляет запись TournamentSubscription.
+class TournamentUnsubscribeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, tournament_id):
+        # Блок 23.1. Ищем подписку текущего пользователя на этот турнир.
+        subscription = TournamentSubscription.objects.filter(
+            user=request.user,
+            tournament_id=tournament_id
+        ).first()
+
+        # Блок 23.2. Если подписки нет, возвращаем понятный ответ.
+        if subscription is None:
+            return Response(
+                {
+                    'error': 'Вы не подписаны на этот турнир.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Блок 23.3. Удаляем подписку.
+        subscription.delete()
+
+        return Response(
+            {
+                'message': 'Вы успешно отписались от турнира.'
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# Блок 24. API списка турниров, на которые подписан пользователь.
+# Endpoint:
+# GET /api/my-tournaments/
+#
+# Этот endpoint нужен для личного кабинета:
+# пользователь видит список турниров, за которыми следит.
+class MyTournamentsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Блок 24.1. Получаем подписки только текущего пользователя.
+        subscriptions = TournamentSubscription.objects.filter(
+            user=request.user
+        ).select_related(
+            'tournament',
+            'user'
+        ).order_by('-created_at')
+
+        # Блок 24.2. Превращаем подписки в JSON.
+        serializer = TournamentSubscriptionSerializer(
+            subscriptions,
+            many=True
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
         )
