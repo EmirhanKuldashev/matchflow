@@ -156,3 +156,13 @@ CACHES = {
         'LOCATION': 'matchflow-local-cache',
     }
 }
+
+# Блок 5. Настройки email для разработки.
+# Письма подтверждения выводятся в консоль, а не отправляются реально.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'MatchFlow <noreply@matchflow.local>'
+
+# Блок 6. Настройки подтверждения email.
+# Ссылка подтверждения действует 24 часа.
+EMAIL_CONFIRMATION_MAX_AGE = 60 * 60 * 24
+EMAIL_CONFIRMATION_URL = 'http://127.0.0.1:8000/api/confirm-email/{token}/'

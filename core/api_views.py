@@ -1,8 +1,10 @@
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.utils import timezone
 from django.core.paginator import Paginator
 from rest_framework import status
@@ -23,6 +25,7 @@ from .models import (
     TournamentApplication,
     TournamentSubscription,
 )
+from .email_utils import send_email_confirmation
 from .serializers import (
     MatchCreateSerializer,
     MatchResultUpdateSerializer,
@@ -116,16 +119,26 @@ class RegisterAPIView(APIView):
             # Создаём User и Profile.
             user = serializer.save()
 
+            # Блок 2.1. Отправляем письмо подтверждения email.
+            # В режиме разработки ссылка дополнительно возвращается в JSON.
+            confirm_url = send_email_confirmation(user)
+
+            response_data = {
+                'message': 'Пользователь успешно зарегистрирован. Проверьте email для подтверждения регистрации.',
+                'email_confirmation_required': True,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                }
+            }
+
+            if settings.DEBUG:
+                response_data['debug_confirm_url'] = confirm_url
+
             # Возвращаем успешный JSON-ответ.
             return Response(
-                {
-                    'message': 'Пользователь успешно зарегистрирован.',
-                    'user': {
-                        'id': user.id,
-                        'username': user.username,
-                        'email': user.email,
-                    }
-                },
+                response_data,
                 status=status.HTTP_201_CREATED
             )
 
@@ -133,6 +146,57 @@ class RegisterAPIView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# Блок 2.2. API подтверждения email.
+# Проверяет token из ссылки и меняет email_confirmed на True.
+class ConfirmEmailAPIView(APIView):
+    def get(self, request, token):
+        signer = TimestampSigner()
+
+        try:
+            user_id = signer.unsign(
+                token,
+                max_age=settings.EMAIL_CONFIRMATION_MAX_AGE
+            )
+        except SignatureExpired:
+            return Response(
+                {'error': 'Ссылка подтверждения истекла.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except BadSignature:
+            return Response(
+                {'error': 'Некорректная ссылка подтверждения.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Пользователь не найден.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if not hasattr(user, 'profile'):
+            return Response(
+                {'error': 'У пользователя нет профиля.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if user.profile.email_confirmed:
+            return Response(
+                {'message': 'Email уже подтверждён.'},
+                status=status.HTTP_200_OK
+            )
+
+        user.profile.email_confirmed = True
+        user.profile.save()
+
+        return Response(
+            {'message': 'Email успешно подтверждён.'},
+            status=status.HTTP_200_OK
         )
     
 # Блок 2. API входа пользователя по email.

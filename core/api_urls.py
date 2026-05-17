@@ -2,6 +2,7 @@ from django.urls import path
 
 from .api_views import (
     CaptainJoinRequestListAPIView,
+    ConfirmEmailAPIView,
     LoginAPIView,
     MatchCreateAPIView,
     MatchDetailAPIView,
@@ -43,6 +44,14 @@ urlpatterns = [
         'register/',
         RegisterAPIView.as_view(),
         name='api_register'
+    ),
+
+    # Блок 2.1. API подтверждения email:
+    # GET /api/confirm-email/<token>/
+    path(
+        'confirm-email/<path:token>/',
+        ConfirmEmailAPIView.as_view(),
+        name='api_confirm_email'
     ),
 
     # Блок 3. API входа по email:
