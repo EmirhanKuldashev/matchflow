@@ -26,6 +26,13 @@ from .api_views import (
     TournamentListAPIView,
     TournamentSubscribeAPIView,
     TournamentUnsubscribeAPIView,
+    AdminTeamApproveAPIView,
+    AdminTeamRejectAPIView,
+    TeamUpdateAPIView,
+    TournamentUpdateAPIView,
+    MatchUpdateAPIView,
+    MatchCancelAPIView,
+    MatchRescheduleAPIView
 )
 
 # Блок 1. API-маршруты приложения core.
@@ -234,4 +241,33 @@ urlpatterns = [
         MyTournamentsAPIView.as_view(),
         name='api_my_tournaments'
     ),
+
+    path(
+'admin/teams/<int:team_id>/approve/', AdminTeamApproveAPIView.as_view()
+    ),
+
+    path(
+'admin/teams/<int:team_id>/reject/', AdminTeamRejectAPIView.as_view()
+    ),
+
+    path(
+'teams/<int:team_id>/update/', TeamUpdateAPIView.as_view()
+    ),
+
+    path(
+'tournaments/<int:tournament_id>/update/', TournamentUpdateAPIView.as_view()
+    ),
+
+    path(
+'matches/<int:match_id>/update/', MatchUpdateAPIView.as_view()
+    ),
+
+    path(
+'matches/<int:match_id>/cancel/', MatchCancelAPIView.as_view()
+    ),
+
+    path(
+'matches/<int:match_id>/reschedule/', MatchRescheduleAPIView.as_view()
+    )
+
 ]
