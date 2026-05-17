@@ -81,7 +81,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'matchflow_db',
         'USER': 'postgres',
-        'PASSWORD': 'Chubaka2006',
+        'PASSWORD': 'Gerynwarard1',
         'HOST': 'localhost',
         'PORT': '5433',
     }

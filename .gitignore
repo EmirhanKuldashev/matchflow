@@ -1,16 +1,17 @@
+# Python / Django
 venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
 db.sqlite3
-
 .env
 media/
 staticfiles/
-
 .idea/
 .vscode/
-
 *.log
+
+# React / Node.js
+frontend/node_modules/
+frontend/build/

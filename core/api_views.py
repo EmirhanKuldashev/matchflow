@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from django.db import models
+from .permissions import IsAdminUser
 
 from .models import (
     Match,
@@ -1527,3 +1528,74 @@ class MyTournamentsAPIView(APIView):
             serializer.data,
             status=status.HTTP_200_OK
         )
+
+class AdminTeamApproveAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, team_id):
+        team = Team.objects.get(id=team_id)
+        team.status = 'approved'
+        team.save()
+        return Response({'message': 'Команда подтверждена'})
+
+class AdminTeamRejectAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, team_id):
+        team = Team.objects.get(id=team_id)
+        team.status = 'rejected'
+        team.save()
+        return Response({'message': 'Команда отклонена'})
+
+class TeamUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, team_id):
+        team = Team.objects.get(id=team_id, captain=request.user)
+        serializer = TeamCreateSerializer(team, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'team': TeamSerializer(team).data})
+        return Response(serializer.errors, status=400)
+
+class TournamentUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, tournament_id):
+        tournament = Tournament.objects.get(id=tournament_id, organizer=request.user)
+        serializer = TournamentCreateSerializer(tournament, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'tournament': TournamentSerializer(tournament).data})
+        return Response(serializer.errors, status=400)
+
+class MatchUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, match_id):
+        match = Match.objects.get(id=match_id, tournament__organizer=request.user)
+        serializer = MatchCreateSerializer(match, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'match': MatchSerializer(match).data})
+        return Response(serializer.errors, status=400)
+
+class MatchCancelAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, match_id):
+        match = Match.objects.get(id=match_id, tournament__organizer=request.user)
+        if match.status == 'played':
+            return Response({'error': 'Нельзя отменить сыгранный матч'}, 400)
+        match.status = 'cancelled'
+        match.save()
+        return Response({'message': 'Матч отменён'})
+
+class MatchRescheduleAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, match_id):
+        match = Match.objects.get(id=match_id, tournament__organizer=request.user)
+        match.match_date = request.data.get('match_date')
+        match.save()
+        return Response({'message': 'Матч перенесён'})
