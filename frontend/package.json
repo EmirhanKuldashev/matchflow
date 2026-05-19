@@ -35,5 +35,7 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "description": "MatchFlow frontend client for Django REST API",
+  "proxy": "http://localhost:8000"
 }
