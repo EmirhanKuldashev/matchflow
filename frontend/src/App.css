@@ -367,6 +367,59 @@ main {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.cookie-demo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -8px 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.cookie-demo span {
+  font-weight: 700;
+}
+
+.cache-demo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.cache-demo h2 {
+  margin-top: 0;
+}
+
+.cache-demo p {
+  margin: 6px 0;
+}
+
+.cache-demo__actions,
+.cache-demo__result {
+  display: grid;
+  gap: 10px;
+}
+
+.cache-demo__result {
+  min-width: min(360px, 100%);
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.cache-demo__result strong {
+  color: var(--text);
+}
+
 input,
 select,
 textarea {
@@ -705,6 +758,10 @@ th {
   .form-grid,
   .filters,
   .filters--wide {
+    grid-template-columns: 1fr;
+  }
+
+  .cache-demo {
     grid-template-columns: 1fr;
   }
 

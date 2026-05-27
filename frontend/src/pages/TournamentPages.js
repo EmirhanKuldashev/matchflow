@@ -13,12 +13,42 @@ const tournamentStatuses = [
   { value: 'finished', label: 'Завершён' },
 ];
 
+function getCookie(name) {
+  const cookies = document.cookie.split('; ');
+
+  for (const cookie of cookies) {
+    const [key, value] = cookie.split('=');
+
+    if (key === name) {
+      return decodeURIComponent(value || '');
+    }
+  }
+
+  return '';
+}
+
+function buildTournamentQuery(params) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, value);
+    }
+  });
+
+  return decodeURIComponent(query.toString());
+}
+
 export function TournamentsPage() {
   const { isAuthenticated, role } = useAuth();
-  const [filters, setFilters] = useState({ search: '', city: '', game_format: '', status: '', page: 1, page_size: 6 });
+  const savedCity = getCookie('last_tournament_city');
+  const [filters, setFilters] = useState({ search: '', city: savedCity, game_format: '', status: '', page: 1, page_size: 6 });
+  const [cookieCity, setCookieCity] = useState(savedCity);
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [cacheCheck, setCacheCheck] = useState(null);
+  const [cacheLoading, setCacheLoading] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -34,7 +64,36 @@ export function TournamentsPage() {
   const pagination = paginationFrom(payload);
 
   function updateFilter(key, value) {
+    if (key === 'city') setCookieCity('');
     setFilters((current) => ({ ...current, [key]: value, page: 1 }));
+  }
+
+  function clearSavedCity() {
+    document.cookie = 'last_tournament_city=; Max-Age=0; path=/';
+    setCookieCity('');
+    setFilters((current) => ({ ...current, city: '', page: 1 }));
+  }
+
+  async function repeatCacheRequest() {
+    setCacheLoading(true);
+    setError('');
+
+    const startedAt = performance.now();
+
+    try {
+      const data = await api.listTournaments(filters);
+      const finishedAt = performance.now();
+
+      setPayload(data);
+      setCacheCheck({
+        duration: Math.round((finishedAt - startedAt) * 10) / 10,
+        query: buildTournamentQuery(filters) || 'без query-параметров',
+      });
+    } catch (err) {
+      setError(getErrorText(err));
+    } finally {
+      setCacheLoading(false);
+    }
   }
 
   return (
@@ -58,6 +117,34 @@ export function TournamentsPage() {
           {tournamentStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </div>
+
+      {cookieCity && (
+        <div className="cookie-demo">
+          <span>Город загружен из cookie: {cookieCity}</span>
+          <button className="button button--ghost button--small" type="button" onClick={clearSavedCity}>Очистить сохранённый город</button>
+        </div>
+      )}
+
+      <article className="panel cache-demo">
+        <div>
+          <h2>Cache API</h2>
+          <p>Список турниров кэшируется backend-ом на 300 секунд.</p>
+          <p>Ключ кэша зависит от параметров фильтрации.</p>
+          <p>Повторный запрос с теми же параметрами должен использовать cache на backend.</p>
+        </div>
+        <div className="cache-demo__actions">
+          <button className="button button--primary" type="button" disabled={cacheLoading} onClick={repeatCacheRequest}>
+            {cacheLoading ? 'Проверяем...' : 'Повторить запрос для проверки cache'}
+          </button>
+          {cacheCheck && (
+            <div className="cache-demo__result">
+              <strong>Время последнего запроса: {cacheCheck.duration} мс</strong>
+              <span>Query-параметры: {cacheCheck.query}</span>
+              <span>Повторный запрос отправлен с теми же параметрами. Backend использует cache для таких повторных запросов.</span>
+            </div>
+          )}
+        </div>
+      </article>
 
       <Alert type="error">{error}</Alert>
       {loading ? <Loading /> : tournaments.length === 0 ? <EmptyState title="Турниры не найдены" text="Попробуйте изменить параметры фильтрации." /> : (
